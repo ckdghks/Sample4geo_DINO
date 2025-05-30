@@ -25,4 +25,14 @@ class InfoNCE(nn.Module):
 
         return loss  
  
+def dino_loss(student_feat, teacher_feat, temp_s=0.1, temp_t=0.07):
+    student_feat = F.normalize(student_feat, dim=-1)
+    teacher_feat = F.normalize(teacher_feat, dim=-1)
 
+    # stop gradient on teacher
+    teacher_feat = teacher_feat.detach()
+
+    student_logits = student_feat / temp_s
+    teacher_logits = teacher_feat / temp_t
+
+    return F.kl_div(F.log_softmax(student_logits, dim=-1), F.softmax(teacher_logits, dim=-1), reduction='batchmean')

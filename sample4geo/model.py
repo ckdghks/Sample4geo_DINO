@@ -46,3 +46,20 @@ class TimmModel(nn.Module):
             image_features = self.model(img1)
              
             return image_features
+
+class DINOModel(nn.Module):
+    def __init__(self, backbone_name, img_size=384):
+        super().__init__()
+        self.student = TimmModel(backbone_name, pretrained=True, img_size=img_size)
+        self.teacher = TimmModel(backbone_name, pretrained=True, img_size=img_size)
+        
+        # EMA를 위한 초기화
+        for param in self.teacher.parameters():
+            param.requires_grad = False
+
+    def update_teacher(self, momentum=0.996):
+        for student_param, teacher_param in zip(self.student.parameters(), self.teacher.parameters()):
+            teacher_param.data = momentum * teacher_param.data + (1. - momentum) * student_param.data
+
+    def forward(self, x):
+        return self.student(x)

@@ -109,6 +109,79 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
 
     return losses.avg
 
+def train_with_distill(train_config, model, teacher_model, dataloader, loss_function, dino_loss_fn, optimizer, scheduler=None, scaler=None, epoch=0):
+    model.train()
+    teacher_model.eval()
+
+    losses = AverageMeter()
+    time.sleep(0.1)
+    optimizer.zero_grad(set_to_none=True)
+
+    step = 1
+    bar = tqdm(dataloader, total=len(dataloader)) if train_config.verbose else dataloader
+
+    for query, reference, ids in bar:
+        query = query.to(train_config.device)
+        reference = reference.to(train_config.device)
+
+        if scaler:
+            with autocast():
+                features1, features2 = model(query, reference)
+
+                if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
+                    loss_main = loss_function(features1, features2, model.module.logit_scale.exp())
+                else:
+                    loss_main = loss_function(features1, features2, model.logit_scale.exp())
+
+                if epoch >= train_config.distill_start_epoch:
+                    with torch.no_grad():
+                        t_feat1, t_feat2 = teacher_model(query, reference)
+                    loss_distill = (dino_loss_fn(features1, t_feat1) + dino_loss_fn(features2, t_feat2)) / 2
+                    loss = loss_main + train_config.distill_weight * loss_distill
+                else:
+                    loss = loss_main
+                losses.update(loss.item())
+
+            scaler.scale(loss).backward()
+            if train_config.clip_grad:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_value_(model.parameters(), train_config.clip_grad)
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+        else:
+            features1, features2 = model(query, reference)
+            if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
+                loss_main = loss_function(features1, features2, model.module.logit_scale.exp())
+            else:
+                loss_main = loss_function(features1, features2, model.logit_scale.exp())
+
+            if train_config.epoch >= train_config.distill_start_epoch:
+                with torch.no_grad():
+                    t_feat1, t_feat2 = teacher_model(query, reference)
+                loss_distill = (dino_loss_fn(features1, t_feat1) + dino_loss_fn(features2, t_feat2)) / 2
+                loss = loss_main + train_config.distill_weight * loss_distill
+            else:
+                loss = loss_main
+            losses.update(loss.item())
+
+            loss.backward()
+            if train_config.clip_grad:
+                torch.nn.utils.clip_grad_value_(model.parameters(), train_config.clip_grad)
+            optimizer.step()
+            optimizer.zero_grad()
+
+        if train_config.scheduler in ["polynomial", "cosine", "constant"]:
+            scheduler.step()
+
+        if train_config.verbose:
+            bar.set_postfix(ordered_dict={"loss": f"{loss.item():.4f}", "loss_avg": f"{losses.avg:.4f}", "lr": f"{optimizer.param_groups[0]['lr']:.6f}"})
+        step += 1
+
+    if train_config.verbose:
+        bar.close()
+
+    return losses.avg
 
 def predict(train_config, model, dataloader):
     

@@ -30,10 +30,10 @@ class Configuration:
     mixed_precision: bool = True
     custom_sampling: bool = True         # use custom sampling instead of random
     seed = 1
-    epochs: int = 1
-    batch_size: int = 128                # keep in mind real_batch_size = 2 * batch_size
+    epochs: int = 40
+    batch_size: int = 16                # keep in mind real_batch_size = 2 * batch_size
     verbose: bool = True
-    gpu_ids: tuple = (0,1,2,3)           # GPU ids for training
+    gpu_ids: tuple = (0,1)           # GPU ids for training
     
     # Eval
     batch_size_eval: int = 128
@@ -57,13 +57,13 @@ class Configuration:
     
     # Dataset
     dataset: str = 'U1652-D2S'           # 'U1652-D2S' | 'U1652-S2D'
-    data_folder: str = "./data/U1652"
+    data_folder: str = "/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release"
     
     # Augment Images
     prob_flip: float = 0.5              # flipping the sat image and drone image simultaneously
     
     # Savepath for model checkpoints
-    model_path: str = "./university"
+    model_path: str = "./university_original"
     
     # Eval before training
     zero_shot: bool = False
@@ -72,7 +72,7 @@ class Configuration:
     checkpoint_start = None
   
     # set num_workers to 0 if on Windows
-    num_workers: int = 0 if os.name == 'nt' else 4 
+    num_workers: int = 0 if os.name == 'nt' else 2
     
     # train on GPU if available
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu' 
@@ -91,10 +91,10 @@ class Configuration:
 config = Configuration() 
 
 if config.dataset == 'U1652-D2S':
-    config.query_folder_train = './data/U1652/train/satellite'
-    config.gallery_folder_train = './data/U1652/train/drone'   
-    config.query_folder_test = './data/U1652/test/query_drone' 
-    config.gallery_folder_test = './data/U1652/test/gallery_satellite'    
+    config.query_folder_train = '/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release/train/drone' 
+    config.gallery_folder_train = '/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release/train/satellite'
+    config.query_folder_test = '/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release/test/query_drone' 
+    config.gallery_folder_test = '/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release/test/gallery_satellite'  
 elif config.dataset == 'U1652-S2D':
     config.query_folder_train = './data/U1652/train/satellite'
     config.gallery_folder_train = './data/U1652/train/drone'    
