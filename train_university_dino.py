@@ -13,7 +13,7 @@ from sample4geo.dataset.university import U1652DatasetEval, U1652DatasetTrain, g
 from sample4geo.trainer import train_with_distill
 from sample4geo.utils import setup_system, Logger
 from sample4geo.evaluate.university import evaluate
-from sample4geo.loss import InfoNCE, dino_loss
+from sample4geo.loss import InfoNCE, dino_loss, PatchSimLoss, GlobalStructureSimLoss
 from sample4geo.model import TimmModel
 
 @dataclass
@@ -42,7 +42,7 @@ class Configuration:
     dataset: str = 'U1652-D2S'
     data_folder: str = "/workspace/mount/SSD_2T_a/AAM_Data/University_dataset/University-Release"
     prob_flip: float = 0.5
-    model_path: str = "./university"
+    model_path: str = "./university_dino_patch_loss_global"
     zero_shot: bool = False
     checkpoint_start = None
     num_workers: int = 0 if os.name == 'nt' else 2
@@ -50,7 +50,9 @@ class Configuration:
     cudnn_benchmark: bool = True
     cudnn_deterministic: bool = False
     distill_start_epoch: int = 10
+    patch_start_epoch: int = 15
     distill_weight: float = 1.0
+    patch_weight: float = 0.05  # default 값, patch loss를 안 쓸 거면 0
     teacher_momentum: float = 0.996
 
 
@@ -126,6 +128,8 @@ if __name__ == '__main__':
 
     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
     loss_function = InfoNCE(loss_function=loss_fn, device=config.device)
+    patch_sim_loss_fn = PatchSimLoss(temperature=0.1) if config.patch_weight > 0 else None
+    structure_loss_fn = GlobalStructureSimLoss() if config.patch_weight > 0 else None
 
     if config.mixed_precision:
         scaler = GradScaler(init_scale=2.**10)
@@ -163,9 +167,21 @@ if __name__ == '__main__':
     for epoch in range(1, config.epochs + 1):
         print(f"\n{'-'*30}[Epoch: {epoch}]{'-'*30}")
 
-        train_loss = train_with_distill(config, model, teacher_model,
-                                        train_dataloader, loss_function, dino_loss,
-                                        optimizer, scheduler, scaler, epoch)
+        if config.patch_weight > 0:
+            train_loss = train_with_distill(
+                config, model, teacher_model,
+                train_dataloader, loss_function, dino_loss,
+                optimizer, scheduler, scaler, epoch,
+                # patch_sim_loss_fn=patch_sim_loss_fn  # ✅ patch loss 포함
+                patch_sim_loss_fn=structure_loss_fn
+            )
+        else:
+            train_loss = train_with_distill(
+                config, model, teacher_model,
+                train_dataloader, loss_function, dino_loss,
+                # optimizer, scheduler, scaler, epoch  # ❌ patch loss 없이
+                patch_sim_loss_fn=structure_loss_fn
+            )
 
         print(f"Epoch: {epoch}, Train Loss = {train_loss:.3f}, Lr = {optimizer.param_groups[0]['lr']:.6f}")
 

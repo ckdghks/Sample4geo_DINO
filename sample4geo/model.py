@@ -34,18 +34,28 @@ class TimmModel(nn.Module):
 
         
     def forward(self, img1, img2=None):
-        
+        def extract_cls_and_patch(x):
+            features = self.model.forward_features(x)
+
+            if features.dim() == 3:  # ViT 계열: (B, N+1, D)
+                cls_token = features[:, 0]         # (B, D)
+                patch_tokens = features[:, 1:]     # (B, N, D)
+            elif features.dim() == 4:  # CNN 계열: (B, C, H, W)
+                B, C, H, W = features.shape
+                cls_token = features.mean(dim=[2, 3])  # GAP → (B, C)
+                patch_tokens = features.flatten(2).transpose(1, 2)  # (B, H*W, C)
+            else:
+                raise ValueError(f"Unexpected feature shape: {features.shape}")
+
+            return cls_token, patch_tokens
+
         if img2 is not None:
-       
-            image_features1 = self.model(img1)     
-            image_features2 = self.model(img2)
-            
-            return image_features1, image_features2            
-              
+            cls1, patch1 = extract_cls_and_patch(img1)
+            cls2, patch2 = extract_cls_and_patch(img2)
+            return cls1, cls2, patch1, patch2
         else:
-            image_features = self.model(img1)
-             
-            return image_features
+            cls, patch = extract_cls_and_patch(img1)
+            return cls, patch
 
 class DINOModel(nn.Module):
     def __init__(self, backbone_name, img_size=384):
